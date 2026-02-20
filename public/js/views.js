@@ -103,6 +103,7 @@ const Views = {
             '<div class="stats-level">Nivel <strong>' + character.level + '</strong></div>' +
             '<div class="xp-bar"><div class="xp-fill" style="width:' + xpPct + '%"></div></div>' +
             '<div class="xp-text">' + character.xp + ' / ' + character.xp_next + ' XP</div>' +
+            '<div class="gold-display"><span class="gold-icon">\u{1FA99}</span> <span class="gold-amount">' + (character.gold || 0) + '</span> oro</div>' +
           '</div>' +
         '</div>' +
         Views.statBar('❤️', 'Vida', effectiveStats.hp_max, 400, 'hp') +
@@ -231,7 +232,7 @@ const Views = {
       '<div class="pve-counter">' +
         '<div class="pve-counter-icon">⚔️</div>' +
         '<div class="pve-counter-text">' +
-          '<span class="pve-count">' + info.fightsToday + '</span> / <span class="pve-max">' + info.maxFights + '</span> peleas hoy' +
+          '<span class="pve-count">' + info.fightsToday + '</span> / <span class="pve-max">' + info.maxFights + '</span> peleas esta hora' +
         '</div>' +
         '<div class="pve-counter-bar"><div class="pve-counter-fill" style="width:' + (info.fightsToday / info.maxFights * 100) + '%"></div></div>' +
       '</div>' +
@@ -257,6 +258,10 @@ const Views = {
               '<span class="pve-xp-value">+' + d.baseXP + '</span>' +
               (d.bonusXP > 0 ? ' <span class="pve-xp-bonus">+' + d.bonusXP + ' bonus</span>' : '') +
             '</div>' +
+            '<div class="pve-diff-gold">' +
+              '<span class="pve-gold-label">\u{1FA99} Oro:</span> ' +
+              '<span class="pve-gold-value">' + (d.goldRange || '?') + '</span>' +
+            '</div>' +
           '</div>';
         }).join('') +
       '</div>' +
@@ -268,7 +273,7 @@ const Views = {
         '<ul class="pve-info-list">' +
           '<li>Pelea contra NPCs para ganar XP</li>' +
           '<li>Perder NO quita XP</li>' +
-          '<li>Máximo 20 peleas por día</li>' +
+          '<li>Máximo 15 peleas por día</li>' +
           '<li>10s de espera entre peleas</li>' +
           '<li>¡Los jugadores con menor nivel ganan bonus XP!</li>' +
         '</ul>' +
@@ -277,14 +282,14 @@ const Views = {
   },
 
   // PvE Result Screen
-  pveResultScreen(isWin, xpGained, character, leveledUp, fightsToday, maxFights, difficulty) {
+  pveResultScreen(isWin, xpGained, character, leveledUp, fightsToday, maxFights, difficulty, goldGained) {
     var remaining = maxFights - fightsToday;
     return '<div class="victory-screen">' +
       '<div class="victory-crown">' + (isWin ? '🏆' : '💀') + '</div>' +
       '<div class="victory-text ' + (isWin ? '' : 'defeat-text') + '">' + (isWin ? '¡VICTORIA!' : '¡DERROTA!') + '</div>' +
       '<div class="victory-sub">' + (isWin ? '+' + xpGained + ' XP' : 'Sin pérdida de XP') + '</div>' +
       (leveledUp ? '<div class="level-up-text">⬆️ ¡NIVEL ' + character.level + '!</div>' : '') +
-      '<div class="pve-result-counter">' + fightsToday + '/' + maxFights + ' peleas PvE hoy (' + remaining + ' restantes)</div>' +
+      '<div class="pve-result-counter">' + fightsToday + '/' + maxFights + ' peleas PvE esta hora (' + remaining + ' restantes)</div>' +
       '<div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:16px;">' +
         '<button class="btn btn-gold" onclick="App.closePveResult()" style="max-width:200px;">🏟️ Volver a Arena</button>' +
         '<button class="btn btn-outline" onclick="App.screenStack=[\'select\',\'hub\']; App.showHub();" style="max-width:200px;">🏠 Hub</button>' +
@@ -349,11 +354,12 @@ const Views = {
   },
 
   // Result Screen (PvP)
-  resultScreen(isWin, xpGained, character, leveledUp) {
+  resultScreen(isWin, xpGained, character, leveledUp, goldGained) {
     return '<div class="victory-screen">' +
       '<div class="victory-crown">' + (isWin ? '🏆' : '💀') + '</div>' +
       '<div class="victory-text ' + (isWin ? '' : 'defeat-text') + '">' + (isWin ? '¡VICTORIA!' : '¡DERROTA!') + '</div>' +
       '<div class="victory-sub">+' + xpGained + ' XP</div>' +
+      (goldGained ? '<div class="gold-reward">\u{1FA99} +' + goldGained + ' oro</div>' : '') +
       (leveledUp ? '<div class="level-up-text">⬆️ ¡NIVEL ' + character.level + '!</div>' : '') +
       '<button class="btn btn-gold" onclick="App.closeResult()" style="max-width:300px;">Continuar</button>' +
     '</div>';
@@ -501,6 +507,118 @@ const Views = {
         '</div>';
       }).join('') +
       '</div>' +
+    '</div>';
+  }
+
+,
+
+  // ============ SELL ITEM FORM ============
+  sellItemForm(character, defs) {
+    var inventory = JSON.parse(character.inventory || '[]');
+    var equipped = [character.weapon, character.weapon2, character.weapon3, character.weapon4, character.armor, character.accessory].filter(Boolean);
+    var sellable = inventory.filter(function(i) {
+      if (i.type === 'weapon') return !([character.weapon, character.weapon2, character.weapon3, character.weapon4].includes(i.id));
+      if (i.type === 'armor') return character.armor !== i.id;
+      if (i.type === 'accessory') return character.accessory !== i.id;
+      return true;
+    });
+    if (sellable.length === 0) return '<p class="empty-text">No tienes items para vender (desequipa primero)</p>';
+    return '<div class="sell-row">' +
+      '<select id="sell-item-select" class="sell-select">' +
+        '<option value="">-- Selecciona item --</option>' +
+        sellable.map(function(i) {
+          var def = null;
+          if (i.type === 'weapon' && defs.weapons) def = defs.weapons[i.id];
+          else if (i.type === 'armor' && defs.armors) def = defs.armors[i.id];
+          else if (i.type === 'accessory' && defs.accessories) def = defs.accessories[i.id];
+          var label = def ? def.emoji + ' ' + def.name : i.id;
+          return '<option value="' + i.type + '|' + i.id + '">' + label + '</option>';
+        }).join('') +
+      '</select>' +
+      '<input type="number" id="sell-price-input" class="sell-price" placeholder="Precio (10-9999)" min="10" max="9999">' +
+      '<button class="btn btn-sm btn-gold" onclick="App.listItemForSale()">Vender</button>' +
+    '</div>';
+  },
+
+  // ============ MARKET SCREEN ============
+  marketScreen(shopData, marketplaceData, myListings, character, defs) {
+    var activeTab = Views._marketTab || 'shop';
+    var gold = character.gold || 0;
+
+    var tabsHtml = '<div class="market-tabs">' +
+      '<div class="market-tab ' + (activeTab === 'shop' ? 'active' : '') + '" onclick="App.switchMarketTab(\'shop\')">\u{1F9D9} Mercader</div>' +
+      '<div class="market-tab ' + (activeTab === 'market' ? 'active' : '') + '" onclick="App.switchMarketTab(\'market\')">\u{1F4E6} Mercado</div>' +
+    '</div>';
+
+    var contentHtml = '';
+    if (activeTab === 'shop') {
+      contentHtml = '<div class="shop-section">' +
+        '<div class="shop-npc-banner"><span class="shop-npc-emoji">\u{1F9D9}</span> <strong>Mercader Errante</strong> <span class="shop-rotation">Rota cada 6h</span></div>' +
+        '<div class="shop-grid">' +
+        (shopData.items || []).map(function(item) {
+          var canBuy = gold >= item.price;
+          var typeLabel = {weapon:'\u2694\uFE0F Arma',armor:'\u{1F6E1}\uFE0F Armadura',accessory:'\u{1F48D} Accesorio'}[item.type] || item.type;
+          return '<div class="shop-card">' +
+            '<div class="shop-type-badge">' + typeLabel + '</div>' +
+            '<div class="shop-item-name">' + item.emoji + ' ' + item.name + '</div>' +
+            '<div class="shop-item-desc">' + item.desc + '</div>' +
+            '<div class="shop-item-price">\u{1FA99} ' + item.price + '</div>' +
+            '<button class="btn btn-sm ' + (canBuy ? 'btn-gold' : 'btn-disabled') + '" ' +
+              (canBuy ? "onclick=\"App.buyFromShop('" + item.type + "','" + item.id + "'," + item.price + ")\"" : 'disabled') + '>' +
+              (canBuy ? 'Comprar' : 'Oro insuficiente') +
+            '</button>' +
+          '</div>';
+        }).join('') +
+        '</div></div>';
+    } else {
+      var otherListings = (marketplaceData || []).filter(function(l) { return l.seller_id !== character.id; });
+      contentHtml = '<div class="marketplace-section">' +
+        '<div class="mp-block"><h3>\u{1F4E6} Mis items en venta</h3>' +
+        ((myListings || []).length === 0 ? '<p class="empty-text">No tienes items en venta</p>' :
+          '<div class="listing-grid">' +
+          (myListings || []).map(function(l) {
+            var def = null;
+            if (l.item_type === 'weapon' && defs.weapons) def = defs.weapons[l.item_id];
+            else if (l.item_type === 'armor' && defs.armors) def = defs.armors[l.item_id];
+            else if (l.item_type === 'accessory' && defs.accessories) def = defs.accessories[l.item_id];
+            return '<div class="listing-card mine">' +
+              '<div class="listing-item">' + (def ? def.emoji + ' ' + def.name : l.item_id) + '</div>' +
+              '<div class="listing-price">\u{1FA99} ' + l.price + '</div>' +
+              '<button class="btn btn-sm btn-outline" onclick="App.cancelListing(' + l.id + ')">Retirar</button>' +
+            '</div>';
+          }).join('') + '</div>') +
+        '</div>' +
+        '<div class="mp-block"><h3>\u{1F4B0} Poner a la venta</h3>' + Views.sellItemForm(character, defs) + '</div>' +
+        '<div class="mp-block"><h3>\u{1F6D2} Mercado de Jugadores</h3>' +
+        (otherListings.length === 0 ? '<p class="empty-text">No hay items en el mercado</p>' :
+          '<div class="listing-grid">' +
+          otherListings.map(function(l) {
+            var def = null;
+            if (l.item_type === 'weapon' && defs.weapons) def = defs.weapons[l.item_id];
+            else if (l.item_type === 'armor' && defs.armors) def = defs.armors[l.item_id];
+            else if (l.item_type === 'accessory' && defs.accessories) def = defs.accessories[l.item_id];
+            var canBuy = gold >= l.price;
+            return '<div class="listing-card">' +
+              '<div class="listing-item">' + (def ? def.emoji + ' ' + def.name : l.item_id) + '</div>' +
+              '<div class="listing-seller">' + (l.seller_player_name || 'Desconocido') + '</div>' +
+              '<div class="listing-price">\u{1FA99} ' + l.price + '</div>' +
+              '<button class="btn btn-sm ' + (canBuy ? 'btn-gold' : 'btn-disabled') + '" ' +
+                (canBuy ? 'onclick="App.buyFromMarketplace(' + l.id + ')"' : 'disabled') + '>' +
+                (canBuy ? 'Comprar' : 'Oro insuficiente') +
+              '</button>' +
+            '</div>';
+          }).join('') + '</div>') +
+        '</div></div>';
+    }
+
+    return '<div class="screen active">' +
+      '<div class="header">' +
+        '<button class="header-back" onclick="App.showHub()">\u2190</button>' +
+        '<div class="header-title">\u{1F3EA} Mercado</div>' +
+        '<div class="header-gold">\u{1FA99} ' + gold + '</div>' +
+      '</div>' +
+      tabsHtml +
+      contentHtml +
     '</div>';
   }
 };

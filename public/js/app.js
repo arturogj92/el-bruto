@@ -6,6 +6,8 @@ const App = {
   screenStack: ["select"],
   _pendingChoices: null,
   _pveCooldown: false,
+  _pveCooldownEnd: 0,
+  _cooldownInterval: null,
 
   async init() {
     try { this.defs = await API.getDefinitions(); } catch(e) { console.warn("Defs:", e); }
@@ -113,7 +115,7 @@ const App = {
       this.currentCharacter = result.character;
       this._pendingChoices = result.pendingChoices;
 
-      this.showResult(result.result === "win", result.xpGained, result.character, result.leveledUp);
+      this.showResult(result.result === "win", result.xpGained, result.character, result.leveledUp, result.goldGained);
     } catch(e) { this.toast("Error: " + e.message, "error"); }
   },
 
@@ -154,7 +156,7 @@ const App = {
       this.currentCharacter = result.character;
       this._pendingChoices = result.pendingChoices;
       
-      this.showResult(result.result === "win", result.xpGained, result.character, result.leveledUp);
+      this.showResult(result.result === "win", result.xpGained, result.character, result.leveledUp, result.goldGained);
     } catch(e) { this.toast("Error: " + e.message, "error"); }
   },
 
@@ -171,7 +173,7 @@ const App = {
   async fightPVE(difficulty) {
     if (!this.currentCharacter) return;
     if (this._pveCooldown) {
-      this.toast("⏳ Espera antes de pelear otra vez...", "error");
+      const remaining = Math.ceil((this._pveCooldownEnd - Date.now()) / 1000); this.toast("⏳ Espera " + remaining + "s antes de pelear otra vez", "error");
       return;
     }
     try {
@@ -204,14 +206,16 @@ const App = {
       
       this.showPveResult(result.result === "win", result.xpGained, result.character, result.leveledUp, result.fightsToday, result.maxFights, difficulty);
 
-      // Start cooldown
+      // Start cooldown with visual timer
       this._pveCooldown = true;
-      setTimeout(() => { this._pveCooldown = false; }, 10000);
+      this._pveCooldownEnd = Date.now() + 10000;
+      this._startCooldownTimer();
+      setTimeout(() => { this._pveCooldown = false; this._pveCooldownEnd = 0; this._clearCooldownTimer(); }, 10000);
     } catch(e) { this.toast("Error: " + e.message, "error"); }
   },
 
-  showPveResult(isWin, xpGained, character, leveledUp, fightsToday, maxFights, difficulty) {
-    this.setScreen(Views.pveResultScreen(isWin, xpGained, character, leveledUp, fightsToday, maxFights, difficulty));
+  showPveResult(isWin, xpGained, character, leveledUp, fightsToday, maxFights, difficulty, goldGained) {
+    this.setScreen(Views.pveResultScreen(isWin, xpGained, character, leveledUp, fightsToday, maxFights, difficulty, goldGained));
   },
 
   async closePveResult() {
@@ -231,8 +235,8 @@ const App = {
   },
 
   // ============ RESULT ============
-  showResult(isWin, xpGained, character, leveledUp) {
-    this.setScreen(Views.resultScreen(isWin, xpGained, character, leveledUp));
+  showResult(isWin, xpGained, character, leveledUp, goldGained) {
+    this.setScreen(Views.resultScreen(isWin, xpGained, character, leveledUp, goldGained));
   },
 
   async closeResult() {
@@ -325,6 +329,37 @@ const App = {
     catch(e) { this.toast("Error: " + e.message, "error"); }
   },
 
+
+  // ============ COOLDOWN TIMER ============
+  _startCooldownTimer() {
+    this._clearCooldownTimer();
+    const updateTimer = () => {
+      const btns = document.querySelectorAll(".pve-fight-btn, .pve-difficulty-card");
+      const remaining = Math.max(0, Math.ceil((this._pveCooldownEnd - Date.now()) / 1000));
+      if (remaining <= 0) { this._clearCooldownTimer(); return; }
+      btns.forEach(btn => {
+        if (!btn.dataset.originalText) btn.dataset.originalText = btn.textContent;
+        let overlay = btn.querySelector(".cooldown-overlay");
+        if (!overlay) {
+          overlay = document.createElement("div");
+          overlay.className = "cooldown-overlay";
+          btn.style.position = "relative";
+          btn.style.overflow = "hidden";
+          btn.appendChild(overlay);
+        }
+        overlay.style.cssText = "position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;color:#ff6b6b;border-radius:inherit;z-index:2;pointer-events:none;";
+        overlay.textContent = "⏳ " + remaining + "s";
+      });
+    };
+    updateTimer();
+    this._cooldownInterval = setInterval(updateTimer, 200);
+  },
+
+  _clearCooldownTimer() {
+    if (this._cooldownInterval) { clearInterval(this._cooldownInterval); this._cooldownInterval = null; }
+    document.querySelectorAll(".cooldown-overlay").forEach(el => el.remove());
+  },
+
   // ============ TOAST ============
   toast(msg, type) {
     type = type || "info";
@@ -357,4 +392,74 @@ App.showComboBook = async function() {
     this.toast('Error: ' + e.message, 'error');
     console.error(e);
   }
+};
+
+
+// ============ MARKET & SHOP ============
+App.showMarket = async function(tab) {
+  if (!this.currentCharacter) return;
+  Views._marketTab = tab || 'shop';
+  try {
+    this.pushScreen('market');
+    const [shopData, mpData, myListings] = await Promise.all([
+      API.getShop(),
+      API.getMarketplace(),
+      API.getMyListings(this.currentCharacter.id)
+    ]);
+    this.setScreen(Views.marketScreen(shopData, mpData, myListings, this.currentCharacter, this.defs));
+  } catch(e) { this.toast('Error: ' + e.message, 'error'); }
+};
+
+App.switchMarketTab = async function(tab) {
+  Views._marketTab = tab;
+  await App.showMarket(tab);
+};
+
+App.buyFromShop = async function(itemType, itemId, price) {
+  if (!this.currentCharacter) return;
+  try {
+    const result = await API.buyFromShop(this.currentCharacter.id, itemType, itemId, price);
+    this.currentCharacter = result.character;
+    this.toast('\u{1FA99} \u00A1Item comprado!', 'success');
+    await App.showMarket('shop');
+  } catch(e) { this.toast('Error: ' + e.message, 'error'); }
+};
+
+App.buyFromMarketplace = async function(listingId) {
+  if (!this.currentCharacter) return;
+  try {
+    const result = await API.buyFromMarketplace(this.currentCharacter.id, listingId);
+    this.currentCharacter = result.character;
+    this.toast('\u{1FA99} \u00A1Compra realizada!', 'success');
+    await App.showMarket('market');
+  } catch(e) { this.toast('Error: ' + e.message, 'error'); }
+};
+
+App.cancelListing = async function(listingId) {
+  if (!this.currentCharacter) return;
+  try {
+    const result = await API.cancelListing(this.currentCharacter.id, listingId);
+    this.currentCharacter = result.character;
+    this.toast('Item retirado del mercado', 'info');
+    await App.showMarket('market');
+  } catch(e) { this.toast('Error: ' + e.message, 'error'); }
+};
+
+App.listItemForSale = async function() {
+  if (!this.currentCharacter) return;
+  var sel = document.getElementById('sell-item-select');
+  var priceInput = document.getElementById('sell-price-input');
+  if (!sel || !priceInput) return;
+  var val = sel.value;
+  if (!val) { App.toast('Selecciona un item', 'error'); return; }
+  var parts = val.split('|');
+  var itemType = parts[0], itemId = parts[1];
+  var price = parseInt(priceInput.value);
+  if (!price || price < 10 || price > 9999) { App.toast('Precio: 10-9999', 'error'); return; }
+  try {
+    var result = await API.listOnMarketplace(App.currentCharacter.id, itemType, itemId, price);
+    App.currentCharacter = result.character;
+    App.toast('\u{1FA99} Item puesto a la venta', 'success');
+    await App.showMarket('market');
+  } catch(e) { App.toast('Error: ' + e.message, 'error'); }
 };

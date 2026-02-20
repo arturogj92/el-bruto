@@ -56,6 +56,7 @@ class CombatAnimator {
   }
 
   async processEntry(entry, baseDelay) {
+    try {
     switch (entry.type) {
       case "intro":
         this.addLog(entry.text, "ability");
@@ -74,25 +75,34 @@ class CombatAnimator {
       case "lifesteal":
         this.addLog(entry.text, entry.type === "heal" || entry.type === "lifesteal" ? "heal" : "ability");
         if (entry.amount) {
-          this.showDamageNumber(entry.fighter === this.f1.name ? "left" : "right", "+" + entry.amount, true);
+          var healSide = entry.fighter === this.f1.name ? "left" : "right";
+          this.showDamageNumber(healSide, "+" + entry.amount, true);
         }
+        this.syncHP(entry);
         await this.wait(baseDelay * 0.6);
         break;
       case "counter":
       case "thorns":
         this.addLog(entry.text, "damage");
-        this.showDamageNumber(entry.target === this.f1.name ? "left" : "right", "-" + entry.damage, false);
+        var cSide = entry.target === this.f1.name ? "left" : "right";
+        this.showDamageNumber(cSide, "-" + entry.damage, false);
+        this.flashAvatar(cSide);
+        this.syncHP(entry);
         await this.wait(baseDelay * 0.5);
         break;
       case "double_strike":
         this.addLog(entry.text, "critical");
-        this.showDamageNumber(entry.defender === this.f1.name ? "left" : "right", "-" + entry.damage, false);
-        this.flashAvatar(entry.defender === this.f1.name ? "left" : "right");
+        var dsSide = entry.defender === this.f1.name ? "left" : "right";
+        this.showDamageNumber(dsSide, "-" + entry.damage, false);
+        this.flashAvatar(dsSide);
+        this.syncHP(entry);
         await this.wait(baseDelay * 0.5);
         break;
       case "poison":
         this.addLog(entry.text, "damage");
-        this.showDamageNumber(entry.fighter === this.f1.name ? "left" : "right", "-" + entry.damage, false);
+        var pSide = entry.fighter === this.f1.name ? "left" : "right";
+        this.showDamageNumber(pSide, "-" + entry.damage, false);
+        this.syncHP(entry);
         await this.wait(baseDelay * 0.4);
         break;
       case "stun":
@@ -100,14 +110,20 @@ class CombatAnimator {
         await this.wait(baseDelay * 0.5);
         break;
       case "status":
-        this.updateHPBars(entry.f1, entry.f2);
+        this.f1hp = entry.f1.hp; this.f1hpMax = entry.f1.hp_max; this.f2hp = entry.f2.hp; this.f2hpMax = entry.f2.hp_max; this.updateHPBars(entry.f1, entry.f2);
         break;
       case "end":
         this.updateHPBars(entry.f1, entry.f2);
         this.addLog(entry.text, "end");
         await this.wait(600);
         break;
+      default:
+        if (entry.text) this.addLog(entry.text, "ability");
+        this.syncHP(entry);
+        await this.wait(baseDelay * 0.4);
+        break;
     }
+    } catch(err) { console.error("Combat anim error:", err, entry); if (entry.text) this.addLog(entry.text, "ability"); }
   }
 
   async animateAttack(entry) {
@@ -168,13 +184,13 @@ class CombatAnimator {
     var bar = document.getElementById("hp-" + side);
     var txt = document.getElementById("hp-text-" + side);
     if (bar) {
-      var p = (hp / hpMax) * 100;
+      var p = (hpMax > 0 && !isNaN(hp)) ? (hp / hpMax) * 100 : 100;
       bar.style.width = Math.max(0, p) + "%";
       bar.className = "fighter-hp-fill";
       if (p < 15) bar.classList.add("critical");
       else if (p < 35) bar.classList.add("low");
     }
-    if (txt) txt.textContent = Math.max(0, hp) + " / " + hpMax;
+    if (txt) txt.textContent = (isNaN(hp) ? "?" : Math.max(0, Math.floor(hp))) + " / " + (isNaN(hpMax) ? "?" : Math.floor(hpMax));
   }
 
   updateHPBars(f1, f2) {

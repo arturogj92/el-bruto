@@ -462,8 +462,27 @@ function simulateCombat(fighter1, fighter2) {
   let turn = 0;
   const maxTurns = 40;
 
+  // Pre-process: aura protectora
+  if (f1.abilitySet.has("aura_protectora")) f1.damageReduction = 0.15;
+  if (f2.abilitySet.has("aura_protectora")) f2.damageReduction = 0.15;
+
   while (f1.hp > 0 && f2.hp > 0 && turn < maxTurns) {
     turn++;
+    // Regeneration heal at turn start
+    for (const f of [f1, f2]) {
+      if (f.hp > 0 && f.abilitySet.has("regeneracion")) {
+        const regen = Math.floor(f.hp_max * 0.08);
+        f.hp = Math.min(f.hp + regen, f.hp_max);
+        if (regen > 0) log.push({ type: "heal", fighter: f.name, amount: regen, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: "💖 " + f.name + " regenera " + regen + " HP!" });
+      }
+      // Bendición divina check
+      if (f.hp > 0 && f.hp / f.hp_max <= 0.50 && f.abilitySet.has("bendicion") && f.abilityUses.bendicion > 0) {
+        f.abilityUses.bendicion--;
+        const heal = Math.floor(f.hp_max * 0.35);
+        f.hp = Math.min(f.hp + heal, f.hp_max);
+        log.push({ type: "heal", fighter: f.name, amount: heal, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: "✨ ¡" + f.name + " recibe una BENDICIÓN DIVINA! +" + heal + " HP!" });
+      }
+    }
     let f1Speed = f1.speed + Math.random() * 5;
     let f2Speed = f2.speed + Math.random() * 5;
 
@@ -473,7 +492,7 @@ function simulateCombat(fighter1, fighter2) {
 
     const [attacker, defender] = f1Speed >= f2Speed ? [f1, f2] : [f2, f1];
 
-    processTurn(attacker, defender, turn, log);
+    processTurn(attacker, defender, turn, log, f1, f2);
     if (defender.hp <= 0) break;
 
     if (!defender.stunned) {
@@ -490,7 +509,7 @@ function simulateCombat(fighter1, fighter2) {
         const dmg = f.poisonDmg || 5;
         f.hp -= dmg;
         f.poisoned--;
-        log.push({ type: 'poison', fighter: f.name, damage: dmg, text: `☠️ ${f.name} recibe ${dmg} daño por veneno!` });
+        log.push({ type: 'poison', fighter: f.name, damage: dmg, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `☠️ ${f.name} recibe ${dmg} daño por veneno!` });
         if (f.hp <= 0) break;
       }
     }
@@ -576,7 +595,7 @@ function prepareFighter(data) {
   };
 }
 
-function processTurn(attacker, defender, turn, log) {
+function processTurn(attacker, defender, turn, log, f1, f2) {
   // Dodge check
   let dodgeChance = 0.08 + (defender.speed - attacker.speed) * 0.006;
   if (defender.abilitySet.has('esquivar')) dodgeChance += 0.20;
@@ -635,6 +654,8 @@ function processTurn(attacker, defender, turn, log) {
   // Escudo defense
   if (defender.abilitySet.has('escudo')) damage = Math.floor(damage * 0.80);
 
+  // Aura protectora
+  if (defender.damageReduction) damage = Math.floor(damage * (1 - defender.damageReduction));
   // Defense reduction
   const defReduction = defender.defense * 0.7;
   damage = Math.max(1, Math.floor(damage - defReduction));
@@ -698,7 +719,7 @@ function processTurn(attacker, defender, turn, log) {
     const heal = Math.floor(damage * 0.20);
     attacker.hp = Math.min(attacker.hp + heal, attacker.hp_max);
     if (heal > 0) {
-      log.push({ type: 'lifesteal', fighter: attacker.name, amount: heal, text: `🧛 ${attacker.name} roba ${heal} HP!` });
+      log.push({ type: 'lifesteal', fighter: attacker.name, amount: heal, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `🧛 ${attacker.name} roba ${heal} HP!` });
     }
   }
 
@@ -708,7 +729,7 @@ function processTurn(attacker, defender, turn, log) {
     const heal = Math.floor(damage * cd.lifeStealPercent);
     attacker.hp = Math.min(attacker.hp + heal, attacker.hp_max);
     if (heal > 0) {
-      log.push({ type: 'lifesteal', fighter: attacker.name, amount: heal, text: `⚰️ ${attacker.name} drena ${heal} HP!` });
+      log.push({ type: 'lifesteal', fighter: attacker.name, amount: heal, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `⚰️ ${attacker.name} drena ${heal} HP!` });
     }
   }
 
@@ -716,21 +737,21 @@ function processTurn(attacker, defender, turn, log) {
   if (defender.hp > 0 && defender.abilitySet.has('espinas')) {
     const thornsDmg = Math.floor(damage * 0.30);
     attacker.hp -= thornsDmg;
-    log.push({ type: 'thorns', fighter: defender.name, target: attacker.name, damage: thornsDmg, text: `🌵 Espinas devuelven ${thornsDmg} daño!` });
+    log.push({ type: 'thorns', fighter: defender.name, target: attacker.name, damage: thornsDmg, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `🌵 Espinas devuelven ${thornsDmg} daño!` });
   }
 
   // Counterattack
   if (defender.hp > 0 && defender.abilitySet.has('contraataque') && Math.random() < 0.25) {
     const counterDmg = Math.max(1, Math.floor(defender.strength * 1.2));
     attacker.hp -= counterDmg;
-    log.push({ type: 'counter', fighter: defender.name, target: attacker.name, damage: counterDmg, text: `🔄 ¡${defender.name} CONTRAATACA por ${counterDmg}!` });
+    log.push({ type: 'counter', fighter: defender.name, target: attacker.name, damage: counterDmg, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `🔄 ¡${defender.name} CONTRAATACA por ${counterDmg}!` });
   }
 
   // Double strike ability
   if (attacker.abilitySet.has('doble_golpe') && Math.random() < 0.20 && defender.hp > 0) {
     const secondDmg = Math.max(1, Math.floor(damage * 0.5));
     defender.hp -= secondDmg;
-    log.push({ type: 'double_strike', attacker: attacker.name, defender: defender.name, damage: secondDmg, text: `⚔️⚔️ ¡${attacker.name} golpea DOS VECES! +${secondDmg}!` });
+    log.push({ type: 'double_strike', attacker: attacker.name, defender: defender.name, damage: secondDmg, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `⚔️⚔️ ¡${attacker.name} golpea DOS VECES! +${secondDmg}!` });
   }
 
   // Triple attack combo (lluvia_proyectiles)
@@ -740,7 +761,7 @@ function processTurn(attacker, defender, turn, log) {
       const hit2 = Math.max(1, Math.floor(damage * 0.4));
       const hit3 = Math.max(1, Math.floor(damage * 0.3));
       defender.hp -= (hit2 + hit3);
-      log.push({ type: 'double_strike', attacker: attacker.name, defender: defender.name, damage: hit2 + hit3, text: `🔱🏹 ¡${attacker.name} lanza LLUVIA DE PROYECTILES! +${hit2 + hit3}!` });
+      log.push({ type: 'double_strike', attacker: attacker.name, defender: defender.name, damage: hit2 + hit3, f1hp: f1.hp, f1hpMax: f1.hp_max, f2hp: f2.hp, f2hpMax: f2.hp_max, text: `🔱🏹 ¡${attacker.name} lanza LLUVIA DE PROYECTILES! +${hit2 + hit3}!` });
     }
   }
 }

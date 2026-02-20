@@ -37,6 +37,7 @@ function init() {
       accessory TEXT DEFAULT NULL,
       inventory TEXT DEFAULT '[]',
       pending_choices TEXT DEFAULT NULL,
+      gold INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (player_id) REFERENCES players(id)
     );
@@ -86,6 +87,16 @@ function init() {
       FOREIGN KEY (char_id) REFERENCES characters(id)
     );
 
+    CREATE TABLE IF NOT EXISTS marketplace (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seller_id INTEGER NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      price INTEGER NOT NULL,
+      listed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (seller_id) REFERENCES characters(id)
+    );
+
     CREATE TABLE IF NOT EXISTS discoveries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       player_id INTEGER NOT NULL,
@@ -133,6 +144,7 @@ function init() {
   try { db.exec("ALTER TABLE characters ADD COLUMN inventory TEXT DEFAULT '[]'"); } catch(e) {}
   try { db.exec("ALTER TABLE characters ADD COLUMN pending_choices TEXT DEFAULT NULL"); } catch(e) {}
   try { db.exec("ALTER TABLE characters ADD COLUMN defense INTEGER DEFAULT 10"); } catch(e) {}
+  try { db.exec("ALTER TABLE characters ADD COLUMN gold INTEGER DEFAULT 0"); } catch(e) {}
 }
 
 // Player queries
@@ -151,8 +163,8 @@ const getAllCharacters = () => db.prepare(`
 
 const createCharacter = (playerId, name) => {
   return db.prepare(`
-    INSERT INTO characters (player_id, name, hp_max, hp_base, strength, defense, speed)
-    VALUES (?, ?, 120, 120, 10, 10, 10)
+    INSERT INTO characters (player_id, name, hp_max, hp_base, strength, defense, speed, gold)
+    VALUES (?, ?, 120, 120, 10, 10, 10, 0)
   `).run(playerId, name);
 };
 
@@ -225,6 +237,7 @@ const updateTournamentMatch = (id, data) => {
 
 const resetDB = () => {
   db.exec(`
+    DELETE FROM marketplace;
     DELETE FROM tournament_matches;
     DELETE FROM tournament;
     DELETE FROM fight_log;
@@ -234,8 +247,8 @@ const resetDB = () => {
 };
 
 // PvE queries
-const getPveFightsToday = (charId) => {
-  return db.prepare("SELECT COUNT(*) as count FROM pve_fights WHERE char_id = ? AND fight_date = date('now')").get(charId);
+const getPveFightsHour = (charId) => {
+  return db.prepare("SELECT COUNT(*) as count FROM pve_fights WHERE char_id = ? AND created_at >= datetime('now', '-1 hour')").get(charId);
 };
 
 const addPveFight = (data) => {
@@ -270,6 +283,36 @@ const hasDiscovery = (playerId, comboId) => {
   return !!db.prepare('SELECT 1 FROM discoveries WHERE player_id = ? AND combo_id = ?').get(playerId, comboId);
 };
 
+
+// ============ MARKETPLACE QUERIES ============
+const getMarketplaceListings = () => {
+  return db.prepare(`
+    SELECT m.*, c.name as seller_name, p.display_name as seller_player_name, p.slug as seller_slug
+    FROM marketplace m
+    JOIN characters c ON m.seller_id = c.id
+    JOIN players p ON c.player_id = p.id
+    ORDER BY m.listed_at DESC
+  `).all();
+};
+
+const getMarketplaceListing = (id) => {
+  return db.prepare('SELECT * FROM marketplace WHERE id = ?').get(id);
+};
+
+const addMarketplaceListing = (sellerId, itemType, itemId, price) => {
+  return db.prepare(
+    'INSERT INTO marketplace (seller_id, item_type, item_id, price) VALUES (?, ?, ?, ?)'
+  ).run(sellerId, itemType, itemId, price);
+};
+
+const removeMarketplaceListing = (id) => {
+  return db.prepare('DELETE FROM marketplace WHERE id = ?').run(id);
+};
+
+const getMyListings = (sellerId) => {
+  return db.prepare('SELECT * FROM marketplace WHERE seller_id = ?').all(sellerId);
+};
+
 module.exports = {
   db, init,
   getPlayers, getPlayer, getPlayerById,
@@ -279,6 +322,8 @@ module.exports = {
   getActiveTournament, createTournament, updateTournament,
   getTournamentMatches, createTournamentMatch, updateTournamentMatch,
   resetDB,
-  getPveFightsToday, addPveFight, getMinLevel, getMaxLevel,
-  getDiscoveries, addDiscovery, hasDiscovery
+  getPveFightsHour, addPveFight, getMinLevel, getMaxLevel,
+  getDiscoveries, addDiscovery, hasDiscovery,
+  getMarketplaceListings, getMarketplaceListing, addMarketplaceListing,
+  removeMarketplaceListing, getMyListings
 };

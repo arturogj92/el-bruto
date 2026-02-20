@@ -43,3 +43,20 @@ API.getDiscoveries = async (charId) => {
   if (!res.ok) throw new Error('Error fetching discoveries');
   return res.json();
 };
+
+// Gold, Shop & Marketplace
+API.getShop = function() { return API.get('/api/shop'); };
+API.buyFromShop = function(charId, itemType, itemId, price) {
+  return API.post('/api/shop/buy', { charId, itemType, itemId, price });
+};
+API.getMarketplace = function() { return API.get('/api/marketplace'); };
+API.getMyListings = function(charId) { return API.get('/api/marketplace/mine/' + charId); };
+API.listOnMarketplace = function(charId, itemType, itemId, price) {
+  return API.post('/api/marketplace/list', { charId, itemType, itemId, price: parseInt(price) });
+};
+API.buyFromMarketplace = function(charId, listingId) {
+  return API.post('/api/marketplace/buy', { charId, listingId });
+};
+API.cancelListing = function(charId, listingId) {
+  return API.post('/api/marketplace/cancel', { charId, listingId });
+};
