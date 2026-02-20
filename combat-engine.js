@@ -496,7 +496,7 @@ function simulateCombat(fighter1, fighter2) {
     if (defender.hp <= 0) break;
 
     if (!defender.stunned) {
-      processTurn(defender, attacker, turn, log);
+      processTurn(defender, attacker, turn, log, f1, f2);
       if (attacker.hp <= 0) break;
     } else {
       defender.stunned = false;

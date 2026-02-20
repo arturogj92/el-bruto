@@ -147,6 +147,11 @@ const Views = {
           '<div class="action-name">Ranking</div>' +
           '<div class="action-desc">Clasificación</div>' +
         '</div>' +
+        '<div class="action-card action-market" onclick="App.showMarket()">' +
+          '<div class="action-icon">🏪</div>' +
+          '<div class="action-name">Mercado</div>' +
+          '<div class="action-desc">Compra y vende</div>' +
+        '</div>' +
         '<div class="action-card" onclick="App.showTournament()">' +
           '<div class="action-icon">👑</div>' +
           '<div class="action-name">Torneo</div>' +

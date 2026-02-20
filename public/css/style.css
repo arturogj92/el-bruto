@@ -1149,3 +1149,25 @@ body {
   cursor: not-allowed !important;
   border-color: rgba(255,255,255,0.05) !important;
 }
+
+/* ============ MARKETPLACE ============ */
+.action-market { border-color: var(--gold) !important; }
+.market-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.market-tab { flex: 1; padding: 10px; text-align: center; background: var(--bg-card); border: 1px solid var(--bg-card2); border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+.market-tab.active { background: var(--gold); color: var(--bg-dark); border-color: var(--gold); }
+.shop-npc-banner { background: linear-gradient(135deg, rgba(138,43,226,0.2), rgba(255,215,0,0.1)); border: 1px solid rgba(138,43,226,0.3); border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.shop-npc-emoji { font-size: 28px; }
+.shop-rotation { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.shop-grid, .listing-grid { display: flex; flex-direction: column; gap: 8px; }
+.shop-card, .listing-card { background: var(--bg-card); border: 1px solid var(--bg-card2); border-radius: 10px; padding: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.shop-type-badge, .listing-type-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg-card2); color: var(--text-dim); text-transform: uppercase; }
+.shop-item-name, .listing-item-name { font-weight: 700; flex: 1; min-width: 100px; }
+.shop-item-desc, .listing-item-desc { font-size: 12px; color: var(--text-dim); width: 100%; }
+.shop-item-price, .listing-price { color: var(--gold); font-weight: 700; }
+.shop-buy-btn, .listing-buy-btn { background: var(--gold); color: var(--bg-dark); border: none; border-radius: 6px; padding: 6px 14px; font-weight: 700; cursor: pointer; font-size: 13px; }
+.shop-buy-btn:hover, .listing-buy-btn:hover { filter: brightness(1.1); }
+.listing-seller { font-size: 11px; color: var(--text-dim); }
+.listing-cancel-btn { background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.my-listings-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bg-card2); }
+.my-listings-title { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+.empty-text { color: var(--text-dim); text-align: center; padding: 20px; font-style: italic; }
