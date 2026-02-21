@@ -6,6 +6,7 @@ const App = {
   screenStack: ["select"],
   _pendingChoices: null,
   _pveCooldown: false,
+  _currentWager: 0,
   _pveCooldownEnd: 0,
   _cooldownInterval: null,
 
@@ -123,8 +124,7 @@ const App = {
   async showPVPSelect() {
     if (!this.currentCharacter) return;
     try {
-      const lb = await API.getLeaderboard();
-      const opponents = lb.filter(c => c.id !== this.currentCharacter.id);
+      const opponents = await API.getPvpOpponents(this.currentCharacter.id);
       this.pushScreen("pvp");
       this.setScreen(Views.pvpSelect(opponents, this.currentCharacter));
     } catch(e) { this.toast("Error: " + e.message, "error"); }
@@ -133,8 +133,10 @@ const App = {
   async fightPVP(opponentId) {
     if (!this.currentCharacter) return;
     try {
-      this.toast("⚔️ ¡Preparando duelo!", "info");
-      const result = await API.fightPVP(this.currentCharacter.id, opponentId);
+      const wagerInput = document.getElementById("wager-input");
+      const wager = wagerInput ? parseInt(wagerInput.value) || 0 : 0;
+      this.toast("⚔️ ¡Preparando duelo!" + (wager > 0 ? " Apuesta: " + wager + " oro" : ""), "info");
+      const result = await API.fightPVP(this.currentCharacter.id, opponentId, wager);
       
       const introEntry = result.log.find(e => e.type === "intro");
       const oppChar = Object.values(result.characters).find(c => c.id !== this.currentCharacter.id);
@@ -156,7 +158,7 @@ const App = {
       this.currentCharacter = result.character;
       this._pendingChoices = result.pendingChoices;
       
-      this.showResult(result.result === "win", result.xpGained, result.character, result.leveledUp, result.goldGained);
+      this.showResult(result.result === "win", result.xpGained, result.character, result.leveledUp, result.goldGained, result.wager);
     } catch(e) { this.toast("Error: " + e.message, "error"); }
   },
 
@@ -235,8 +237,8 @@ const App = {
   },
 
   // ============ RESULT ============
-  showResult(isWin, xpGained, character, leveledUp, goldGained) {
-    this.setScreen(Views.resultScreen(isWin, xpGained, character, leveledUp, goldGained));
+  showResult(isWin, xpGained, character, leveledUp, goldGained, wager) {
+    this.setScreen(Views.resultScreen(isWin, xpGained, character, leveledUp, goldGained, wager));
   },
 
   async closeResult() {
@@ -276,6 +278,15 @@ const App = {
       this.toast("Equipado ✅", "success");
       await this.showHub();
     } catch(e) { this.toast("Error: " + e.message, "error"); }
+  },
+
+  // ============ WAGER ============
+  setWager(amount) {
+    const input = document.getElementById("wager-input");
+    if (input) {
+      input.value = amount;
+      this._currentWager = amount;
+    }
   },
 
   // ============ LEADERBOARD ============

@@ -1171,3 +1171,177 @@ body {
 .my-listings-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bg-card2); }
 .my-listings-title { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
 .empty-text { color: var(--text-dim); text-align: center; padding: 20px; font-style: italic; }
+
+.shop-owned-badge { font-size: 11px; color: #2ecc71; background: rgba(46,204,113,0.1); padding: 2px 8px; border-radius: 4px; }
+.shop-gold { margin-left: auto; color: var(--gold); font-size: 14px; font-weight: 700; }
+
+/* Fix dropdown text color */
+select, select option {
+  background: var(--bg-card) !important;
+  color: var(--text) !important;
+}
+select option {
+  background: #1a1a2e !important;
+  color: #fff !important;
+  padding: 8px;
+}
+input[type=number] {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--bg-card2);
+}
+
+
+/* ============ WAGER SECTION ============ */
+.wager-section {
+  background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,165,0,0.05));
+  border: 1px solid rgba(255,215,0,0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 8px 16px 4px;
+}
+
+.wager-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wager-icon {
+  font-size: 20px;
+}
+
+.wager-title {
+  font-weight: 700;
+  color: var(--gold, #ffd700);
+  font-size: 14px;
+  flex: 1;
+}
+
+.wager-gold {
+  font-size: 12px;
+  color: var(--text-dim, #999);
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.wager-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wager-preset {
+  background: rgba(255,215,0,0.15);
+  border: 1px solid rgba(255,215,0,0.3);
+  color: var(--gold, #ffd700);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wager-preset:hover {
+  background: rgba(255,215,0,0.3);
+  transform: scale(1.05);
+}
+
+.wager-preset:active {
+  transform: scale(0.95);
+}
+
+.wager-input {
+  flex: 1;
+  min-width: 70px;
+  max-width: 100px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,215,0,0.4);
+  color: var(--gold, #ffd700);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+
+.wager-input:focus {
+  border-color: var(--gold, #ffd700);
+  box-shadow: 0 0 8px rgba(255,215,0,0.3);
+}
+
+.wager-note {
+  font-size: 11px;
+  color: var(--text-dim, #888);
+  margin-top: 6px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ============ COMBAT BADGE ============ */
+.opponent-card.in-combat {
+  opacity: 0.5;
+  pointer-events: none;
+  position: relative;
+}
+
+.combat-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #ff4444, #cc0000);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  z-index: 2;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(255,0,0,0.3);
+  animation: combatPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes combatPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.opponent-card {
+  position: relative;
+}
+
+/* ============ OPP GOLD ============ */
+.opp-gold {
+  font-size: 11px;
+  color: var(--gold, #ffd700);
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
+/* ============ WAGER RESULT ============ */
+.wager-result {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 10px;
+  margin: 8px auto;
+  max-width: 280px;
+  text-align: center;
+}
+
+.wager-result.wager-win {
+  background: rgba(255,215,0,0.15);
+  color: var(--gold, #ffd700);
+  border: 1px solid rgba(255,215,0,0.3);
+}
+
+.wager-result.wager-lose {
+  background: rgba(255,68,68,0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(255,68,68,0.3);
+}

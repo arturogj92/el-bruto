@@ -302,26 +302,48 @@ const Views = {
     '</div>';
   },
 
-  // PVP Select
+  // PVP Select with wager + combat status
   pvpSelect(opponents, character) {
+    var maxGold = character.gold || 0;
     return '<div class="screen active">' +
       '<div class="header">' +
-        '<button class="header-back" onclick="App.showHub()">←</button>' +
-        '<div class="header-title">🎯 Retar Jugador</div>' +
+        '<button class="header-back" onclick="App.showHub()">\u2190</button>' +
+        '<div class="header-title">\ud83c\udfaf Retar Jugador</div>' +
         '<div class="header-player"><strong>' + character.name + '</strong> Nv.' + character.level + '</div>' +
+      '</div>' +
+      '<div class="wager-section">' +
+        '<div class="wager-header">' +
+          '<span class="wager-icon">\ud83e\ude99</span>' +
+          '<span class="wager-title">Apuesta de Oro</span>' +
+          '<span class="wager-gold">Tu oro: ' + maxGold + '</span>' +
+        '</div>' +
+        '<div class="wager-controls">' +
+          '<button class="wager-preset" onclick="App.setWager(0)">0</button>' +
+          '<button class="wager-preset" onclick="App.setWager(10)">10</button>' +
+          '<button class="wager-preset" onclick="App.setWager(25)">25</button>' +
+          '<button class="wager-preset" onclick="App.setWager(50)">50</button>' +
+          '<button class="wager-preset" onclick="App.setWager(100)">100</button>' +
+          '<input type="number" id="wager-input" class="wager-input" value="0" min="0" max="' + maxGold + '" placeholder="Apuesta">' +
+        '</div>' +
+        '<div class="wager-note">Ambos apuestan la misma cantidad. Ganador se lleva todo.</div>' +
       '</div>' +
       (opponents.length === 0 ?
         '<div style="text-align:center; padding:40px; color:var(--text-dim);">' +
-          '<div style="font-size:48px;">😴</div><p>No hay oponentes aún.</p>' +
+          '<div style="font-size:48px;">\ud83d\ude34</div><p>No hay oponentes a\u00fan.</p>' +
         '</div>' :
         '<div class="opponent-list">' +
           opponents.map(function(opp) {
             var imgUrl = getAvatarUrl(opp.player_slug || opp.player_avatar);
-            return '<div class="opponent-card" onclick="App.fightPVP(' + opp.id + ')">' +
+            var inCombat = opp.in_combat === 1;
+            var oppMaxBet = Math.min(maxGold, opp.gold || 0);
+            return '<div class="opponent-card ' + (inCombat ? 'in-combat' : '') + '" ' +
+              (inCombat ? '' : 'onclick="App.fightPVP(' + opp.id + ')"') + '>' +
+              (inCombat ? '<div class="combat-badge">\u2694\ufe0f EN COMBATE</div>' : '') +
               '<div class="opp-avatar-img"><img src="' + imgUrl + '" alt="' + opp.name + '"></div>' +
               '<div class="opp-info">' +
                 '<div class="opp-name">' + opp.name + '</div>' +
-                '<div class="opp-stats">Nv.' + opp.level + ' | 💪' + opp.strength + ' 🛡️' + opp.defense + ' ⚡' + opp.speed + ' | ' + opp.player_name + '</div>' +
+                '<div class="opp-stats">Nv.' + opp.level + ' | \ud83d\udcaa' + opp.strength + ' \ud83d\udee1\ufe0f' + opp.defense + ' \u26a1' + opp.speed + ' | ' + opp.player_name + '</div>' +
+                '<div class="opp-gold">\ud83e\ude99 ' + (opp.gold || 0) + ' oro' + (oppMaxBet > 0 ? ' (max apuesta: ' + oppMaxBet + ')' : '') + '</div>' +
               '</div>' +
             '</div>';
           }).join('') +
@@ -358,14 +380,21 @@ const Views = {
     '</div>';
   },
 
-  // Result Screen (PvP)
-  resultScreen(isWin, xpGained, character, leveledUp, goldGained) {
+  // Result Screen (PvP) with wager
+  resultScreen(isWin, xpGained, character, leveledUp, goldGained, wager) {
+    var wagerText = '';
+    if (wager && wager > 0) {
+      wagerText = '<div class="wager-result ' + (isWin ? 'wager-win' : 'wager-lose') + '">' +
+        (isWin ? '\ud83e\ude99 +' + wager + ' oro de apuesta ganada!' : '\ud83e\ude99 -' + wager + ' oro de apuesta perdida') +
+      '</div>';
+    }
     return '<div class="victory-screen">' +
-      '<div class="victory-crown">' + (isWin ? '🏆' : '💀') + '</div>' +
-      '<div class="victory-text ' + (isWin ? '' : 'defeat-text') + '">' + (isWin ? '¡VICTORIA!' : '¡DERROTA!') + '</div>' +
+      '<div class="victory-crown">' + (isWin ? '\ud83c\udfc6' : '\ud83d\udc80') + '</div>' +
+      '<div class="victory-text ' + (isWin ? '' : 'defeat-text') + '">' + (isWin ? '\u00a1VICTORIA!' : '\u00a1DERROTA!') + '</div>' +
       '<div class="victory-sub">+' + xpGained + ' XP</div>' +
-      (goldGained ? '<div class="gold-reward">\u{1FA99} +' + goldGained + ' oro</div>' : '') +
-      (leveledUp ? '<div class="level-up-text">⬆️ ¡NIVEL ' + character.level + '!</div>' : '') +
+      (goldGained ? '<div class="gold-reward">\ud83e\ude99 ' + (goldGained >= 0 ? '+' : '') + goldGained + ' oro</div>' : '') +
+      wagerText +
+      (leveledUp ? '<div class="level-up-text">\u2b06\ufe0f \u00a1NIVEL ' + character.level + '!</div>' : '') +
       '<button class="btn btn-gold" onclick="App.closeResult()" style="max-width:300px;">Continuar</button>' +
     '</div>';
   },
@@ -548,6 +577,7 @@ const Views = {
   // ============ MARKET SCREEN ============
   marketScreen(shopData, marketplaceData, myListings, character, defs) {
     var activeTab = Views._marketTab || 'shop';
+    var inventory = JSON.parse(character.inventory || '[]');
     var gold = character.gold || 0;
 
     var tabsHtml = '<div class="market-tabs">' +
@@ -558,9 +588,11 @@ const Views = {
     var contentHtml = '';
     if (activeTab === 'shop') {
       contentHtml = '<div class="shop-section">' +
-        '<div class="shop-npc-banner"><span class="shop-npc-emoji">\u{1F9D9}</span> <strong>Mercader Errante</strong> <span class="shop-rotation">Rota cada 6h</span></div>' +
+        '<div class="shop-npc-banner"><span class="shop-npc-emoji">\u{1F9D9}</span> <strong>Mercader Errante</strong> <span class="shop-gold">\u{1FA99} ' + gold + ' oro</span> <span class="shop-rotation">Rota cada 6h</span></div>' +
         '<div class="shop-grid">' +
-        (shopData.items || []).map(function(item) {
+        (shopData.items || []).filter(function(item) {
+          return !(inventory || []).some(function(i) { return i.type === item.type && i.id === item.id; });
+        }).map(function(item) {
           var canBuy = gold >= item.price;
           var typeLabel = {weapon:'\u2694\uFE0F Arma',armor:'\u{1F6E1}\uFE0F Armadura',accessory:'\u{1F48D} Accesorio'}[item.type] || item.type;
           return '<div class="shop-card">' +

@@ -145,6 +145,8 @@ function init() {
   try { db.exec("ALTER TABLE characters ADD COLUMN pending_choices TEXT DEFAULT NULL"); } catch(e) {}
   try { db.exec("ALTER TABLE characters ADD COLUMN defense INTEGER DEFAULT 10"); } catch(e) {}
   try { db.exec("ALTER TABLE characters ADD COLUMN gold INTEGER DEFAULT 0"); } catch(e) {}
+  try { db.exec("ALTER TABLE characters ADD COLUMN in_combat INTEGER DEFAULT 0"); } catch(e) {}
+  try { db.exec("ALTER TABLE characters ADD COLUMN combat_started_at TEXT"); } catch(e) {}
 }
 
 // Player queries
@@ -313,6 +315,41 @@ const getMyListings = (sellerId) => {
   return db.prepare('SELECT * FROM marketplace WHERE seller_id = ?').all(sellerId);
 };
 
+// ============ COMBAT SESSION HELPERS ============
+const setCombatLock = (charId) => {
+  db.prepare("UPDATE characters SET in_combat = 1, combat_started_at = datetime('now') WHERE id = ?").run(charId);
+};
+
+const clearCombatLock = (charId) => {
+  db.prepare("UPDATE characters SET in_combat = 0, combat_started_at = NULL WHERE id = ?").run(charId);
+};
+
+const isInCombat = (charId) => {
+  const row = db.prepare("SELECT in_combat, combat_started_at FROM characters WHERE id = ?").get(charId);
+  if (!row || !row.in_combat) return false;
+  // Auto-release after 2 minutes
+  if (row.combat_started_at) {
+    const started = new Date(row.combat_started_at + 'Z').getTime();
+    const now = Date.now();
+    if (now - started > 2 * 60 * 1000) {
+      clearCombatLock(charId);
+      return false;
+    }
+  }
+  return true;
+};
+
+const getAllCharactersWithCombatStatus = () => {
+  // Auto-release stale locks first
+  db.prepare("UPDATE characters SET in_combat = 0, combat_started_at = NULL WHERE in_combat = 1 AND combat_started_at < datetime('now', '-2 minutes')").run();
+  return db.prepare(
+    "SELECT c.*, p.display_name as player_name, p.slug as player_slug, p.avatar as player_avatar, " +
+    "c.in_combat, c.combat_started_at " +
+    "FROM characters c JOIN players p ON c.player_id = p.id " +
+    "ORDER BY c.level DESC, c.xp DESC"
+  ).all();
+};
+
 module.exports = {
   db, init,
   getPlayers, getPlayer, getPlayerById,
@@ -325,5 +362,6 @@ module.exports = {
   getPveFightsHour, addPveFight, getMinLevel, getMaxLevel,
   getDiscoveries, addDiscovery, hasDiscovery,
   getMarketplaceListings, getMarketplaceListing, addMarketplaceListing,
-  removeMarketplaceListing, getMyListings
+  removeMarketplaceListing, getMyListings,
+  setCombatLock, clearCombatLock, isInCombat, getAllCharactersWithCombatStatus
 };
