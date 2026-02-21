@@ -16,7 +16,7 @@ const API = {
   getLeaderboard() { return this.get("/api/leaderboard"); },
   getDefinitions() { return this.get("/api/definitions"); },
   matchmaking(charId) { return this.post("/api/fight/matchmaking", { charId }); },
-  fightPVP(charId, opponentId, wager) { return this.post("/api/fight/pvp", { charId, opponentId, wager: wager || 0 }); },
+  fightPVP(charId, opponentId) { return this.post("/api/fight/pvp", { charId, opponentId }); },
   fightPVE(characterId, difficulty) { return this.post("/api/fight/pve", { characterId, difficulty }); },
   getPveInfo(charId) { return this.get("/api/pve/info/" + charId); },
   chooseLevelUp(charId, choiceIndex) { return this.post("/api/character/" + charId + "/choose", { choiceIndex }); },
@@ -24,7 +24,6 @@ const API = {
   getFightHistory(charId) { return this.get("/api/fights/" + charId); },
   getDiscoveries(playerId) { return this.get("/api/discoveries/" + playerId); },
   getActiveCombos(charId) { return this.get("/api/character/" + charId + "/combos"); },
-  getPvpOpponents(charId) { return this.get("/api/pvp/opponents/" + charId); },
   getTournament() { return this.get("/api/tournament"); },
   startTournament() { return this.post("/api/tournament/start"); },
   playTournamentMatch(matchId) { return this.post("/api/tournament/match/" + matchId); },
@@ -61,3 +60,25 @@ API.buyFromMarketplace = function(charId, listingId) {
 API.cancelListing = function(charId, listingId) {
   return API.post('/api/marketplace/cancel', { charId, listingId });
 };
+
+
+// ============ CHALLENGES / RETOS ============
+API.createChallenge = function(challengerId, challengedId, betAmount) {
+  return API.post('/api/challenge', { challenger_id: challengerId, challenged_id: challengedId, bet_amount: betAmount });
+};
+API.getChallenges = function(charId) {
+  return API.get('/api/challenges/' + charId);
+};
+API.getChallengeCount = function(charId) {
+  return API.get('/api/challenges/' + charId + '/count');
+};
+API.acceptChallenge = function(challengeId, acceptedBet) {
+  return API.post('/api/challenge/' + challengeId + '/accept', { accepted_bet: acceptedBet });
+};
+API.declineChallenge = function(challengeId) {
+  return API.post('/api/challenge/' + challengeId + '/decline', {});
+};
+
+// Combat History & Active Combat
+API.getCombatHistory = function(charId) { return API.get('/api/history/' + charId); };
+API.getActiveCombat = function(charId) { return API.get('/api/combat/active/' + charId); };

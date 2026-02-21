@@ -105,7 +105,20 @@ function init() {
       FOREIGN KEY (player_id) REFERENCES players(id),
       UNIQUE(player_id, combo_id)
     );
-  `);
+    CREATE TABLE IF NOT EXISTS challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      challenger_id INTEGER NOT NULL,
+      challenged_id INTEGER NOT NULL,
+      bet_amount INTEGER NOT NULL DEFAULT 0,
+      accepted_bet INTEGER DEFAULT NULL,
+      status TEXT DEFAULT 'pending',
+      winner_id INTEGER DEFAULT NULL,
+      fight_log_id INTEGER DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (challenger_id) REFERENCES characters(id),
+      FOREIGN KEY (challenged_id) REFERENCES characters(id)
+    );
+  `);;
 
   // Seed fixed players with avatar assignments
   const existingPlayers = db.prepare('SELECT COUNT(*) as c FROM players').get();
@@ -145,8 +158,6 @@ function init() {
   try { db.exec("ALTER TABLE characters ADD COLUMN pending_choices TEXT DEFAULT NULL"); } catch(e) {}
   try { db.exec("ALTER TABLE characters ADD COLUMN defense INTEGER DEFAULT 10"); } catch(e) {}
   try { db.exec("ALTER TABLE characters ADD COLUMN gold INTEGER DEFAULT 0"); } catch(e) {}
-  try { db.exec("ALTER TABLE characters ADD COLUMN in_combat INTEGER DEFAULT 0"); } catch(e) {}
-  try { db.exec("ALTER TABLE characters ADD COLUMN combat_started_at TEXT"); } catch(e) {}
 }
 
 // Player queries
@@ -315,42 +326,98 @@ const getMyListings = (sellerId) => {
   return db.prepare('SELECT * FROM marketplace WHERE seller_id = ?').all(sellerId);
 };
 
-// ============ COMBAT SESSION HELPERS ============
-const setCombatLock = (charId) => {
-  db.prepare("UPDATE characters SET in_combat = 1, combat_started_at = datetime('now') WHERE id = ?").run(charId);
+
+// ============ CHALLENGE QUERIES ============
+const createChallenge = (challengerId, challengedId, betAmount) => {
+  return db.prepare('INSERT INTO challenges (challenger_id, challenged_id, bet_amount) VALUES (?, ?, ?)').run(challengerId, challengedId, betAmount);
 };
 
-const clearCombatLock = (charId) => {
-  db.prepare("UPDATE characters SET in_combat = 0, combat_started_at = NULL WHERE id = ?").run(charId);
+const getPendingChallenges = (charId) => {
+  // First expire old challenges
+  db.prepare("UPDATE challenges SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-24 hours')").run();
+  return db.prepare(`SELECT ch.*, 
+    c1.name as challenger_name, c1.level as challenger_level, c1.gold as challenger_gold,
+    p1.display_name as challenger_player, p1.slug as challenger_slug, p1.avatar as challenger_avatar,
+    c2.name as challenged_name, c2.level as challenged_level, c2.gold as challenged_gold,
+    p2.display_name as challenged_player, p2.slug as challenged_slug, p2.avatar as challenged_avatar
+    FROM challenges ch
+    JOIN characters c1 ON ch.challenger_id = c1.id
+    JOIN players p1 ON c1.player_id = p1.id
+    JOIN characters c2 ON ch.challenged_id = c2.id
+    JOIN players p2 ON c2.player_id = p2.id
+    WHERE (ch.challenged_id = ? OR ch.challenger_id = ?) 
+    AND ch.status = 'pending'
+    AND ch.created_at >= datetime('now', '-24 hours')
+    ORDER BY ch.created_at DESC`).all(charId, charId);
 };
 
-const isInCombat = (charId) => {
-  const row = db.prepare("SELECT in_combat, combat_started_at FROM characters WHERE id = ?").get(charId);
-  if (!row || !row.in_combat) return false;
-  // Auto-release after 2 minutes
-  if (row.combat_started_at) {
-    const started = new Date(row.combat_started_at + 'Z').getTime();
-    const now = Date.now();
-    if (now - started > 2 * 60 * 1000) {
-      clearCombatLock(charId);
-      return false;
-    }
-  }
-  return true;
+const getChallengeById = (id) => {
+  return db.prepare('SELECT * FROM challenges WHERE id = ?').get(id);
 };
 
-const getAllCharactersWithCombatStatus = () => {
-  // Auto-release stale locks first
-  db.prepare("UPDATE characters SET in_combat = 0, combat_started_at = NULL WHERE in_combat = 1 AND combat_started_at < datetime('now', '-2 minutes')").run();
-  return db.prepare(
-    "SELECT c.*, p.display_name as player_name, p.slug as player_slug, p.avatar as player_avatar, " +
-    "c.in_combat, c.combat_started_at " +
-    "FROM characters c JOIN players p ON c.player_id = p.id " +
-    "ORDER BY c.level DESC, c.xp DESC"
-  ).all();
+const countPendingChallenges = (charId) => {
+  return db.prepare("SELECT COUNT(*) as count FROM challenges WHERE challenger_id = ? AND status = 'pending' AND created_at >= datetime('now', '-24 hours')").get(charId);
+};
+
+const completeChallenge = (id, winnerId, fightLogId, acceptedBet) => {
+  return db.prepare("UPDATE challenges SET status = 'completed', winner_id = ?, fight_log_id = ?, accepted_bet = ? WHERE id = ?").run(winnerId, fightLogId, acceptedBet, id);
+};
+
+const declineChallenge = (id) => {
+  return db.prepare("UPDATE challenges SET status = 'declined' WHERE id = ?").run(id);
+};
+
+const countIncomingPending = (charId) => {
+  db.prepare("UPDATE challenges SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-24 hours')").run();
+  return db.prepare("SELECT COUNT(*) as count FROM challenges WHERE challenged_id = ? AND status = 'pending' AND created_at >= datetime('now', '-24 hours')").get(charId);
+};
+
+
+// ============ COMBAT HISTORY TABLE ============
+function initCombatHistory() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS combat_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      char1_id INTEGER NOT NULL,
+      char2_id INTEGER NOT NULL,
+      char1_name TEXT,
+      char2_name TEXT,
+      winner_id INTEGER,
+      is_pve INTEGER DEFAULT 0,
+      pve_difficulty TEXT,
+      char1_xp INTEGER DEFAULT 0,
+      char2_xp INTEGER DEFAULT 0,
+      char1_gold INTEGER DEFAULT 0,
+      char2_gold INTEGER DEFAULT 0,
+      wager INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
+
+const addCombatHistory = (data) => {
+  return db.prepare(`
+    INSERT INTO combat_history (char1_id, char2_id, char1_name, char2_name, winner_id, is_pve, pve_difficulty, char1_xp, char2_xp, char1_gold, char2_gold, wager)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.char1_id, data.char2_id, data.char1_name || null, data.char2_name || null,
+    data.winner_id, data.is_pve ? 1 : 0, data.pve_difficulty || null,
+    data.char1_xp || 0, data.char2_xp || 0,
+    data.char1_gold || 0, data.char2_gold || 0,
+    data.wager || 0
+  );
+};
+
+const getCombatHistory = (charId, limit = 50) => {
+  return db.prepare(`
+    SELECT * FROM combat_history
+    WHERE char1_id = ? OR char2_id = ?
+    ORDER BY created_at DESC LIMIT ?
+  `).all(charId, charId, limit);
 };
 
 module.exports = {
+  initCombatHistory, addCombatHistory, getCombatHistory,
   db, init,
   getPlayers, getPlayer, getPlayerById,
   getCharacter, getCharacterById, getAllCharacters,
@@ -363,5 +430,6 @@ module.exports = {
   getDiscoveries, addDiscovery, hasDiscovery,
   getMarketplaceListings, getMarketplaceListing, addMarketplaceListing,
   removeMarketplaceListing, getMyListings,
-  setCombatLock, clearCombatLock, isInCombat, getAllCharactersWithCombatStatus
+  createChallenge, getPendingChallenges, getChallengeById,
+  countPendingChallenges, completeChallenge, declineChallenge, countIncomingPending
 };
